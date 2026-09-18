@@ -25,7 +25,7 @@ const server=createServer(async(req,res)=>{try{
  if(production)res.setHeader('Strict-Transport-Security','max-age=31536000');
  const url=new URL(req.url,origin);if(url.pathname.startsWith('/api/')){
  res.setHeader('Cache-Control','no-store');
- if(req.method==='POST'&&(req.headers.origin!==origin||!req.headers['content-type']?.startsWith('application/json'))){res.writeHead(403);res.end(JSON.stringify({error:'Solicitud no válida.'}));return}
+ if(req.method==='POST'&&(req.headers.origin!==origin||(url.pathname!=='/api/auth/logout'&&!req.headers['content-type']?.startsWith('application/json')))){res.writeHead(403);res.end(JSON.stringify({error:'Solicitud no válida.'}));return}
  let size=0;const chunks=[];for await(const chunk of req){size+=chunk.length;if(size>1_000_000){res.writeHead(413);res.end();return}chunks.push(chunk)}
  const request=new Request(url,{method:req.method,headers:req.headers,...(req.method==='POST'?{body:Buffer.concat(chunks)}:{})});let result;
  if(url.pathname.startsWith('/api/auth/')){if(authActive>=4){res.writeHead(429);res.end(JSON.stringify({error:'Intenta de nuevo en unos segundos.'}));return}authActive++;try{result=await auth(request,req.socket.remoteAddress||'unknown')}finally{authActive--}}
