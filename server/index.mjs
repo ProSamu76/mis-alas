@@ -1,7 +1,23 @@
 import{createServer}from'node:http';import{readFile,stat}from'node:fs/promises';import{resolve,extname}from'node:path';
-import{auth,identify,context}from'./auth.mjs';import{GET,POST}from'./data.mjs';
+import{auth,identify,context,hashPassword,username}from'./auth.mjs';import{GET,POST}from'./data.mjs';
+import{randomUUID}from'node:crypto';import{sql,transaction}from'./database.mjs';
 const port=Number(process.env.PORT||3000);const production=process.env.NODE_ENV==='production';const origin=process.env.PUBLIC_ORIGIN||`http://localhost:${port}`;
 if(production&&(!process.env.PUBLIC_ORIGIN||new URL(origin).protocol!=='https:'))throw Error('Configura PUBLIC_ORIGIN con la dirección HTTPS pública.');
+// Bootstrap only from hosting settings, never from a public request.
+// Existing administrators and passwords are preserved on every restart.
+if(!sql.prepare("SELECT id FROM accounts WHERE role='admin'").get()){
+ const initialUser=process.env.ADMIN_USERNAME,initialPassword=process.env.ADMIN_PASSWORD;
+ if(initialUser!==undefined||initialPassword!==undefined){
+  const user=username(initialUser);const hash=await hashPassword(initialPassword);
+  transaction(()=>{
+   if(sql.prepare("SELECT id FROM accounts WHERE role='admin'").get())return;
+   if(sql.prepare('SELECT id FROM accounts WHERE username=?').get(user))throw Error('ADMIN_USERNAME ya pertenece a una cuenta. Elige otro usuario para administrar.');
+   sql.prepare("INSERT INTO accounts VALUES (?,?,?,?,'admin',NULL,?)").run(randomUUID(),user,'Administración',hash,new Date().toISOString());
+  });
+  console.log('Administrador inicial configurado.');
+ }
+}
+delete process.env.ADMIN_PASSWORD;
 const root=resolve('dist');let authActive=0;
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.svg':'image/svg+xml','.woff2':'font/woff2','.ico':'image/x-icon'};
 const server=createServer(async(req,res)=>{try{
