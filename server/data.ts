@@ -1,4 +1,4 @@
-import { env } from './database.mjs';
+import { env, sql, transaction } from './database.mjs';
 import { currentUser } from './auth.mjs';
 import { CATEGORIES, iso, months } from './model.mjs';
 export const dynamic='force-dynamic';
@@ -52,6 +52,16 @@ export async function POST(req:Request){try{
   const outside=await d.prepare('SELECT id FROM records WHERE participant_id=? AND semester=? AND (date<? OR date>?)').bind(s.participant_id,s.number,start,end).first();if(outside)throw new Error('Existen registros fuera del nuevo rango. Corrige sus fechas primero.');
   if(complete&&end>iso())throw new Error('Espera a la fecha final para validar el semestre.');
   await d.batch([d.prepare('UPDATE semesters SET start=?,end=?,complete=? WHERE id=?').bind(start,end,complete,sid),log(actor,'Semestre actualizado',{before:s,after:{start,end,complete}})]);return Response.json({ok:true});
+ }
+ if(b.action==='deleteRecord'){
+  const rid=text(b.id),reason=text(b.reason,500);
+  transaction(()=>{
+   const old=sql.prepare('SELECT * FROM records WHERE id=?').get(rid);
+   if(!old)throw new Error('La actividad ya no existe. Actualiza la página.');
+   sql.prepare('DELETE FROM records WHERE id=?').run(rid);
+   log(actor,'Actividad eliminada',{before:old,reason}).run();
+  });
+  return Response.json({ok:true});
  }
  if(b.action==='record'||b.action==='import'){
   const input=b.action==='record'?[b.record]:b.records;if(!Array.isArray(input)||!input.length||input.length>500)throw new Error('Importa entre 1 y 500 registros.');

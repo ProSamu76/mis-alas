@@ -1,4 +1,4 @@
-import { env } from './database.mjs';
+import { env, sql, transaction } from './database.mjs';
 import { currentUser } from './auth.mjs';
 import { CATEGORIES, iso, months } from './model.mjs';
 export const dynamic = 'force-dynamic';
@@ -103,6 +103,17 @@ export async function POST(req) {
             if (complete && end > iso())
                 throw new Error('Espera a la fecha final para validar el semestre.');
             await d.batch([d.prepare('UPDATE semesters SET start=?,end=?,complete=? WHERE id=?').bind(start, end, complete, sid), log(actor, 'Semestre actualizado', { before: s, after: { start, end, complete } })]);
+            return Response.json({ ok: true });
+        }
+        if (b.action === 'deleteRecord') {
+            const rid = text(b.id), reason = text(b.reason, 500);
+            transaction(() => {
+                const old = sql.prepare('SELECT * FROM records WHERE id=?').get(rid);
+                if (!old)
+                    throw new Error('La actividad ya no existe. Actualiza la página.');
+                sql.prepare('DELETE FROM records WHERE id=?').run(rid);
+                log(actor, 'Actividad eliminada', { before: old, reason }).run();
+            });
             return Response.json({ ok: true });
         }
         if (b.action === 'record' || b.action === 'import') {
